@@ -164,101 +164,187 @@
   <div class="slide vcenter active" style="background:radial-gradient(ellipse at 50% 0%,rgba(124,58,237,.18) 0%,transparent 65%)">
     <div class="badge" style="margin-bottom:1.25rem">Bases de Datos 2 · UVG · 2025</div>
     <h1>Puzzle <em>Graph</em> Solver</h1>
-    <p class="subtitle" style="margin-top:.75rem">Modelado de rompecabezas físicos como grafos y generación de instrucciones de ensamblaje con BFS sobre Neo4j.</p>
+    <p class="subtitle" style="margin-top:.75rem">Un sistema para almacenar rompecabezas físicos como grafos y generar instrucciones de ensamblaje paso a paso.</p>
     <div class="authors">
       <span>Hugo Barillas</span><span>Pablo Barillas</span><span>Osman De León</span>
       <span>José Mérida</span><span>Roberto Nájera</span><span>Milton Polanco</span>
     </div>
   </div>
 
-  <!-- 2. PROBLEMA -->
+  <!-- 2. EL PROBLEMA -->
   <div class="slide">
     <div class="eyebrow">01 — El Problema</div>
-    <h2>Rompecabezas físicos como grafos</h2>
-    <p style="max-width:680px">Rompecabezas de madera con piezas interconectadas mediante <strong style="color:var(--text)">tabs</strong> (picos) y <strong style="color:var(--text)">huecos</strong>. El sistema almacena la estructura y genera instrucciones ordenadas de ensamblaje manejando piezas faltantes.</p>
-    <div class="cards c3">
-      <div class="card"><div class="icon">🔢</div><h3>Piezas numeradas</h3><p>Número físico único + etiqueta descriptiva para identificar cada pieza durante el armado.</p></div>
-      <div class="card"><div class="icon">🔌</div><h3>Conectores etiquetados</h3><p>Cada tab o hueco lleva una letra local (A, B, C…) marcada con cinta adhesiva, local a la pieza.</p></div>
-      <div class="card"><div class="icon">⚠️</div><h3>Piezas faltantes</h3><p>El sistema arma todo lo posible y reporta exactamente qué sección no puede completarse.</p></div>
+    <h2>¿Qué se nos pidió construir?</h2>
+    <p style="max-width:680px">Se nos entregaron rompecabezas físicos de madera con piezas interconectadas. El objetivo: construir un sistema que almacene la estructura del rompecabezas en una base de datos y, a partir de una pieza inicial, genere instrucciones ordenadas de ensamblaje.</p>
+    <div class="cards c3" style="margin-top:.25rem">
+      <div class="card">
+        <div class="icon">📋</div>
+        <h3>Almacenar la estructura</h3>
+        <p>Modelar piezas y sus conexiones físicas en una base de datos persistente y consultable.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔧</div>
+        <h3>Generar instrucciones</h3>
+        <p>Dado un punto de partida, producir pasos ordenados para armar el rompecabezas completo.</p>
+      </div>
+      <div class="card">
+        <div class="icon">⚠️</div>
+        <h3>Manejar piezas faltantes</h3>
+        <p>Si una o más piezas no están disponibles, armar todo lo posible y reportar qué quedó incompleto.</p>
+      </div>
     </div>
     <div class="callout">
-      <p>El problema es fundamentalmente <strong>relacional</strong> — no importa la forma ni el color de cada pieza, sino únicamente qué conector encaja con cuál. Esa observación guía la elección de tecnología.</p>
+      <p>Lo importante a notar: el problema es fundamentalmente sobre <strong>conexiones</strong>, no sobre formas ni colores. No importa cómo se ve una pieza — importa con quién encaja y cómo.</p>
     </div>
   </div>
 
-  <!-- 3. ETIQUETADO FÍSICO -->
+  <!-- 3. INSIGHT -->
   <div class="slide">
-    <div class="eyebrow">01 — El Problema</div>
-    <h2>Etiquetado físico de los rompecabezas</h2>
-    <p>Un conector queda identificado unívocamente por el par <code>(pieza, etiqueta)</code> — p.ej. <code>(3, B)</code>. Una conexión es el par de conectores que encajan entre sí.</p>
-    <div class="img-grid">
-      <div class="img-card">
-        <img src="figs/ples.jpeg" alt="Plesiosaurs" style="height:calc(100vh - 260px)" />
-        <div class="img-caption"><h3>Plesiosaurs</h3><span class="tag">10 piezas · A/B/C por pieza</span></div>
+    <div class="eyebrow">02 — Observación clave</div>
+    <h2>La relación <em style="color:var(--accent)">es</em> el dato</h2>
+    <p style="max-width:700px">En un rompecabezas, el dato central no es un atributo de una pieza aislada — es la <strong style="color:var(--text)">conexión</strong> entre dos conectores de piezas distintas. En SQL esa conexión es una fila en una tabla de unión. En un grafo <strong style="color:var(--text)">existe por sí misma</strong> como arco de primer nivel.</p>
+    <div class="callout">
+      <p>Pregunta: <strong>¿qué piezas se conectan a la pieza 3?</strong> — esta es la operación central del BFS.</p>
+    </div>
+    <div class="cards c2" style="margin-top:.25rem">
+      <div class="card" style="border-color:#f87171">
+        <h3 style="color:#f87171">PostgreSQL — 4 JOINs</h3>
+        <pre style="margin-top:.5rem;background:var(--bg)"><span class="kw">SELECT</span> p2.*
+<span class="kw">FROM</span>   pieces p1
+<span class="kw">JOIN</span>   connectors c1  <span class="kw">ON</span> c1.piece_id = p1.id
+<span class="kw">JOIN</span>   connections cx <span class="kw">ON</span> cx.conn_a = c1.id
+<span class="kw">JOIN</span>   connectors c2  <span class="kw">ON</span> c2.id = cx.conn_b
+<span class="kw">JOIN</span>   pieces p2      <span class="kw">ON</span> p2.id = c2.piece_id
+<span class="kw">WHERE</span>  p1.local_id = <span class="cm">'P03'</span>;</pre>
       </div>
-      <div class="img-card">
-        <img src="figs/exc.jpeg" alt="Excavator" style="height:calc(100vh - 260px)" />
-        <div class="img-caption"><h3>Excavator</h3><span class="tag">10 piezas · A/B/C/D por pieza</span></div>
+      <div class="card" style="border-color:#4ade80">
+        <h3 style="color:#4ade80">Neo4j — 1 patrón MATCH</h3>
+        <pre style="margin-top:.5rem;background:var(--bg)"><span class="kw">MATCH</span> (:Piece {local_id:<span class="cm">'P03'</span>})
+  -[:HAS_CONNECTOR]->()
+  -[:CONNECTS_WITH]->()
+  <-[:HAS_CONNECTOR]-(n:Piece)
+<span class="kw">RETURN</span> n;</pre>
       </div>
+    </div>
+    <div class="cards c2" style="margin-top:.5rem">
+      <div class="card"><h3>SQL</h3><p>Traversal de vecindad requiere 4 tablas, 4 JOINs. El BFS completo necesita CTEs recursivos.</p></div>
+      <div class="card"><h3>Neo4j</h3><p>La vecindad es nativa. El BFS opera en memoria sobre el mapa de arcos — sin lógica de JOIN.</p></div>
     </div>
   </div>
 
   <!-- 4. POR QUÉ NEO4J -->
   <div class="slide">
-    <div class="eyebrow">02 — Tecnología</div>
+    <div class="eyebrow">03 — Tecnología</div>
     <h2>¿Por qué Neo4j?</h2>
-    <p>En un rompecabezas, el dato central <em>es la conexión</em>. En Neo4j existe como arco de primer nivel; en SQL sería una fila en una tabla de unión que solo cobra sentido con un JOIN.</p>
-    <table>
-      <thead><tr><th>Base de datos</th><th>Traversal vecindad</th><th>Bidireccionalidad</th><th>Sin migraciones</th><th>Veredicto</th></tr></thead>
-      <tbody>
-        <tr><td><strong>Neo4j</strong></td><td class="yes">2 arcos en Cypher</td><td class="yes">Nativo</td><td class="yes">Sí</td><td class="yes">✓ Elegido</td></tr>
-        <tr><td>PostgreSQL</td><td class="no">4+ tablas + JOINs</td><td class="ok">CTE recursivo</td><td class="no">Requiere migraciones</td><td class="no">Fricción innecesaria</td></tr>
-        <tr><td>MongoDB</td><td class="ok">Docs anidados</td><td class="no">Duplicar referencias</td><td class="ok">Flexible</td><td class="no">Riesgo inconsistencia</td></tr>
-        <tr><td>DynamoDB</td><td class="no">Múltiples roundtrips</td><td class="no">Índices secundarios</td><td class="ok">Sí</td><td class="no">No escala</td></tr>
-      </tbody>
-    </table>
-    <div class="cards c2">
-      <div class="card"><h3>Traversals nativos</h3><p>La pregunta «¿qué pieza se conecta a esta?» es un salto de dos arcos en Cypher. En SQL involucraría cuatro tablas y varios JOINs.</p></div>
-      <div class="card"><h3>Subgrafo aislado por puzzle</h3><p>Agregar un nuevo rompecabezas es insertar un subgrafo sin tocar los existentes. Sin scripts de migración.</p></div>
+    <p style="max-width:680px">Neo4j refleja directamente la estructura del problema. Cada ventaja que ofrece corresponde a una necesidad concreta del dominio.</p>
+    <div class="cards c3" style="margin-top:.5rem">
+      <div class="card">
+        <div class="icon">⚡</div>
+        <h3>Traversals nativos</h3>
+        <p>Vecindad entre piezas en dos arcos Cypher. Sin JOINs, sin lógica adicional en la capa de aplicación.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🧩</div>
+        <h3>Sin migraciones de esquema</h3>
+        <p>Agregar un nuevo rompecabezas es insertar un subgrafo aislado. No se toca ninguna tabla existente.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔒</div>
+        <h3>Constraints UNIQUE</h3>
+        <p>Integridad referencial garantizada a nivel de base de datos. Neo4j crea los índices automáticamente.</p>
+      </div>
+      <div class="card">
+        <div class="icon">↔️</div>
+        <h3>Bidireccionalidad nativa</h3>
+        <p>Una conexión física es simétrica. En Neo4j se almacena en ambas direcciones sin duplicar lógica.</p>
+      </div>
+      <div class="card">
+        <div class="icon">💾</div>
+        <h3>Propiedades en nodos</h3>
+        <p>El estado de disponibilidad de cada pieza vive directamente en el nodo <code>:Piece</code> — persistente entre sesiones.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔁</div>
+        <h3>MERGE idempotente</h3>
+        <p>El seed puede ejecutarse múltiples veces sin duplicar datos. Seguro para recargas y actualizaciones.</p>
+      </div>
     </div>
   </div>
 
-  <!-- 5. MODELO -->
+  <!-- 5. SOLUCIÓN: ETIQUETADO -->
   <div class="slide">
-    <div class="eyebrow">03 — Modelo de Datos</div>
-    <h2>Nodos, relaciones y unicidad</h2>
-    <div class="schema">
+    <div class="eyebrow">04 — La Solución</div>
+    <h2>Etiquetado físico de las piezas</h2>
+    <p>Para poder cargar un rompecabezas al sistema, primero hay que etiquetarlo físicamente. Cada pieza y cada conector reciben una identificación única que el ensamblador puede leer a mano.</p>
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="figs/ples.jpeg" alt="Plesiosaurs" style="height:calc(100vh - 280px)" />
+        <div class="img-caption">
+          <h3>Plesiosaurs</h3>
+          <span class="tag">Números en piezas · Letras en conectores</span>
+        </div>
+      </div>
+      <div class="img-card">
+        <img src="figs/exc.jpeg" alt="Excavator" style="height:calc(100vh - 280px)" />
+        <div class="img-caption">
+          <h3>Excavator</h3>
+          <span class="tag">Etiquetas locales por pieza (A, B, C, D)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. MODELO -->
+  <div class="slide">
+    <div class="eyebrow">05 — Modelo de Datos</div>
+    <h2>Cómo se representa en Neo4j</h2>
+    <p>Tres tipos de nodos, tres relaciones. Los IDs globales garantizan unicidad entre puzzles con el formato <code>puzzle_id__local_id</code>.</p>
+    <div class="schema" style="margin-top:.5rem">
       <div class="snode purple">:Puzzle<small>id · name · description</small></div>
       <div class="sedge"><div class="ln"></div>CONTAINS</div>
-      <div class="snode blue">:Piece<small>id · local_id · label · puzzle_id</small></div>
+      <div class="snode blue">:Piece<small>id · local_id · label · available</small></div>
       <div class="sedge"><div class="ln"></div>HAS_CONNECTOR</div>
       <div class="snode teal">:Connector<small>id · local_id · label · type</small></div>
       <div class="sedge"><div class="ln"></div>CONNECTS_WITH ↔</div>
       <div class="snode teal">:Connector</div>
     </div>
-    <div class="cards c3">
-      <div class="card"><h3>IDs globales</h3><p>Formato <code>puzzle_id__local_id</code> — dos puzzles distintos pueden tener P01 sin colisión en Neo4j.</p></div>
-      <div class="card"><h3>3 constraints UNIQUE</h3><p><code>Puzzle.id</code>, <code>Piece.id</code>, <code>Connector.id</code> — creadas automáticamente al correr <code>seed.py</code>.</p></div>
-      <div class="card"><h3>CONNECTS_WITH bidireccional</h3><p>Almacenado en ambas direcciones — cualquier traversal funciona con un único patrón MATCH sin manejar dirección.</p></div>
-    </div>
-    <pre><span class="cm">-- Inserción idempotente con MERGE (ambas direcciones)</span>
-<span class="kw">MATCH</span> (ca:Connector {id:$ga}), (cb:Connector {id:$gb})
+    <div class="split" style="margin-top:.75rem">
+      <div>
+        <div class="cards c2">
+          <div class="card"><h3>IDs globales</h3><p>Dos puzzles pueden tener P01 — <code>ples__P01</code> y <code>exc__P01</code> nunca colisionan.</p></div>
+          <div class="card"><h3>CONNECTS_WITH ↔</h3><p>Almacenado en ambas direcciones — traversal sin manejar orientación.</p></div>
+        </div>
+        <div class="card" style="margin-top:.75rem;border-color:rgba(124,58,237,.4)">
+          <h3>available en :Piece</h3>
+          <p>Propiedad booleana que registra si la pieza está disponible. Persiste en la base de datos — no es estado de sesión.</p>
+        </div>
+      </div>
+      <div>
+        <pre><span class="cm">-- seed idempotente con MERGE</span>
+<span class="kw">MERGE</span> (pc:Piece {id:$gid})
+<span class="kw">SET</span>   pc.local_id=$lid,
+      pc.label=$label,
+      pc.available=true
+
+<span class="cm">-- conexión bidireccional</span>
 <span class="kw">MERGE</span> (ca)-[:CONNECTS_WITH]->(cb)
-<span class="kw">MERGE</span> (cb)-[:CONNECTS_WITH]->(ca);</pre>
+<span class="kw">MERGE</span> (cb)-[:CONNECTS_WITH]->(ca)</pre>
+      </div>
+    </div>
   </div>
 
-  <!-- 6. BFS -->
+  <!-- 7. BFS -->
   <div class="slide">
-    <div class="eyebrow">04 — Algoritmo</div>
+    <div class="eyebrow">06 — Algoritmo</div>
     <h2>BFS de ensamblaje &nbsp;<span style="font-size:.8rem;color:var(--muted);font-weight:400">O(n + m)</span></h2>
     <div class="split">
       <div>
-        <p>BFS desde una pieza inicial elegida por el usuario. Instrucciones en orden de distancia — primero adyacentes, luego a dos pasos.</p>
-        <div class="steps">
-          <div class="step"><div class="n">1</div><div><h3>Cargar grafo en memoria</h3><p>Una consulta Cypher materializa todos los vecinos. Sin latencia de red por iteración del BFS.</p></div></div>
-          <div class="step"><div class="n">2</div><div><h3>Expandir desde pieza inicial</h3><p>Por cada conector se consulta su vecino vía CONNECTS_WITH y se encola si no fue visitado.</p></div></div>
-          <div class="step"><div class="n">3</div><div><h3>Manejar piezas faltantes</h3><p>Pieza faltante → MISSING emitido, rama bloqueada sin abortar el recorrido.</p></div></div>
-          <div class="step"><div class="n">4</div><div><h3>Reportar inalcanzables</h3><p>Piezas disponibles pero bloqueadas por un faltante se reportan al finalizar.</p></div></div>
+        <p>BFS desde una pieza inicial. Produce instrucciones en orden de distancia — primero las adyacentes, luego las de dos pasos. Una sola consulta Cypher carga el grafo completo en memoria antes de empezar.</p>
+        <div class="steps" style="margin-top:.5rem">
+          <div class="step"><div class="n">1</div><div><h3>Cargar vecindad en memoria</h3><p>Una consulta materializa todos los pares de conectores. Sin roundtrips por iteración.</p></div></div>
+          <div class="step"><div class="n">2</div><div><h3>Expandir desde pieza inicial</h3><p>Por cada conector, su vecino vía CONNECTS_WITH se encola si no fue visitado.</p></div></div>
+          <div class="step"><div class="n">3</div><div><h3>Bloquear faltantes</h3><p>Pieza con <code>available=false</code> → MISSING emitido, rama bloqueada.</p></div></div>
+          <div class="step"><div class="n">4</div><div><h3>Reportar inalcanzables</h3><p>Piezas disponibles pero bloqueadas por un faltante se listan al final.</p></div></div>
         </div>
       </div>
       <div>
@@ -267,43 +353,42 @@
           <div class="pill placed">⬤ PLACED</div>
           <div class="pill missing">⬤ MISSING</div>
         </div>
-        <pre><span class="cm">-- vecindad materializada al inicio</span>
+        <pre style="margin-top:.75rem"><span class="cm">-- vecindad materializada al inicio</span>
 <span class="kw">MATCH</span> (:Puzzle {id:$pid})
   -[:CONTAINS]->(:Piece)
   -[:HAS_CONNECTOR]->(ca:Connector)
   -[:CONNECTS_WITH]->(cb:Connector)
 <span class="kw">WHERE</span> ca.puzzle_id = $pid
-  <span class="kw">AND</span> cb.puzzle_id = $pid
   <span class="kw">AND</span> ca.local_id &lt; cb.local_id
 <span class="kw">RETURN</span> ca.local_id <span class="kw">AS</span> a,
        cb.local_id <span class="kw">AS</span> b;</pre>
-        <div class="callout">
-          <p>Cargar el grafo de una sola vez evita la latencia de red en cada iteración — más eficiente que consultar Neo4j por cada paso del BFS.</p>
+        <div class="callout" style="margin-top:.75rem">
+          <p>Cargar el grafo de una sola vez es más eficiente que consultar Neo4j en cada paso — evita latencia de red en cada iteración.</p>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 7. PIEZAS FALTANTES -->
+  <!-- 8. PIEZAS FALTANTES -->
   <div class="slide">
-    <div class="eyebrow">04 — Algoritmo</div>
-    <h2>Manejo de piezas faltantes</h2>
-    <p style="max-width:700px">La disponibilidad de cada pieza se persiste en Neo4j como propiedad <code>available</code> del nodo <code>:Piece</code>. Desde la interfaz el usuario puede marcar o restaurar piezas — el cambio se escribe inmediatamente a la base de datos.</p>
+    <div class="eyebrow">07 — Piezas Faltantes</div>
+    <h2>Disponibilidad persistida en la base de datos</h2>
+    <p style="max-width:700px">El estado de faltante no se pasa como parámetro en tiempo de ejecución — vive en el nodo <code>:Piece</code> como propiedad <code>available</code>. El usuario lo gestiona desde la interfaz y el cambio se escribe directamente a Neo4j.</p>
     <div class="split">
       <div>
-        <pre><span class="cm">-- marcar / restaurar desde Neo4j</span>
+        <pre><span class="cm">-- marcar faltante / restaurar</span>
 <span class="kw">MATCH</span> (pc:Piece {id:$gid})
-<span class="kw">SET</span>   pc.available = false;  <span class="cm">-- faltante</span>
-<span class="kw">SET</span>   pc.available = true;   <span class="cm">-- restaurar</span></pre>
-        <div class="msteps" style="margin-top:.5rem">
-          <div class="mstep"><div class="mbullet" style="background:#f87171"></div><p><strong style="color:var(--text)">MISSING emitido.</strong> Se registra qué conector debería unirse y de qué pieza falta.</p></div>
-          <div class="mstep"><div class="mbullet" style="background:#f87171"></div><p><strong style="color:var(--text)">Rama bloqueada.</strong> La pieza faltante no se encola — sin instrucciones imposibles de ejecutar.</p></div>
-          <div class="mstep"><div class="mbullet" style="background:#fbbf24"></div><p><strong style="color:var(--text)">Rutas alternativas.</strong> Piezas alcanzables por caminos que no pasan por la faltante se ensamblan normal.</p></div>
-          <div class="mstep"><div class="mbullet" style="background:#4ade80"></div><p><strong style="color:var(--text)">Reporte final.</strong> Piezas disponibles pero inalcanzables se listan al terminar.</p></div>
+<span class="kw">SET</span>   pc.available = false
+<span class="kw">SET</span>   pc.available = true</pre>
+        <div class="msteps" style="margin-top:.75rem">
+          <div class="mstep"><div class="mbullet" style="background:#f87171"></div><p><strong style="color:var(--text)">MISSING emitido.</strong> Se indica qué conector debería unirse y de qué pieza falta.</p></div>
+          <div class="mstep"><div class="mbullet" style="background:#f87171"></div><p><strong style="color:var(--text)">Rama bloqueada.</strong> La pieza faltante no se encola — sin instrucciones imposibles.</p></div>
+          <div class="mstep"><div class="mbullet" style="background:#fbbf24"></div><p><strong style="color:var(--text)">Rutas alternativas.</strong> Piezas alcanzables por otros caminos se ensamblan con normalidad.</p></div>
+          <div class="mstep"><div class="mbullet" style="background:#4ade80"></div><p><strong style="color:var(--text)">Reporte final.</strong> Piezas disponibles pero inalcanzables se listan explícitamente.</p></div>
         </div>
       </div>
       <div>
-        <pre><span class="cm">-- el BFS deriva M desde el grafo</span>
+        <pre><span class="cm">-- BFS deriva M desde el grafo cargado</span>
 M = {p ∈ P | p.available = false}
 
 visited = {s}; queue = [s]
@@ -321,52 +406,46 @@ mientras queue no vacío:
 
 para p en P - visited - M:
   emitir MISSING: inalcanzable</pre>
-        <div class="callout">
-          <p>El estado faltante es persistente entre sesiones — no es un parámetro pasado en tiempo de ejecución, sino una propiedad del grafo en Neo4j.</p>
-        </div>
       </div>
     </div>
   </div>
 
-  <!-- 8. PUZZLES -->
+  <!-- 9. PUZZLES -->
   <div class="slide">
-    <div class="eyebrow">05 — Datos</div>
+    <div class="eyebrow">08 — Datos</div>
     <h2>Rompecabezas incluidos</h2>
-    <p>Definidos en <code>data/default_puzzles.json</code>. Cargar con <code>python seed.py</code> — crea constraints UNIQUE y es idempotente.</p>
+    <p>Definidos en <code>data/default_puzzles.json</code>, cargados con <code>python seed.py</code>. Dos puzzles con distinta complejidad de grafo para validar el sistema.</p>
     <div class="split">
       <div>
         <div class="card">
           <h3 style="font-size:.95rem">🦕 Plesiosaurs</h3>
-          <p style="margin-top:.25rem">Cadena casi lineal: P01→…→P08, con P08 ramificando a P09 y P10. Hub único al final de la columna vertebral.</p>
+          <p style="margin-top:.25rem">Cadena casi lineal: P01→…→P08, con P08 ramificando a P09 y P10. Un solo hub al final — caso simple para validar el BFS base.</p>
           <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
             <span class="tag">10 piezas</span><span class="tag">9 conexiones</span><span class="tag">hub: P08</span>
           </div>
         </div>
-        <div class="card">
+        <div class="card" style="margin-top:.75rem">
           <h3 style="font-size:.95rem">🚜 Excavator</h3>
-          <p style="margin-top:.25rem">Grafo más denso. P04 (cabina) y P07 (cuerpo) son hubs con 3 y 4 conectores respectivamente.</p>
+          <p style="margin-top:.25rem">Grafo más denso. P04 (cabina) y P07 (cuerpo central) son hubs con 3 y 4 conectores — caso más complejo con múltiples ramas concurrentes.</p>
           <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
             <span class="tag">10 piezas</span><span class="tag">12 conexiones</span><span class="tag">hubs: P04, P07</span>
           </div>
         </div>
-        <pre><span class="cm"># limpiar y recargar</span>
-MATCH (n) DETACH DELETE n
-python seed.py</pre>
       </div>
-      <div style="display:flex;flex-direction:column;gap:1rem">
+      <div style="display:flex;flex-direction:column;gap:.85rem">
         <div class="img-card">
-          <img src="figs/ples.jpeg" alt="Plesiosaurs" style="height:160px" />
+          <img src="figs/ples.jpeg" alt="Plesiosaurs" style="height:calc((100vh - 320px) / 2)" />
           <div class="img-caption"><h3>Plesiosaurs</h3><span class="tag">9 conexiones</span></div>
         </div>
         <div class="img-card">
-          <img src="figs/exc.jpeg" alt="Excavator" style="height:160px" />
+          <img src="figs/exc.jpeg" alt="Excavator" style="height:calc((100vh - 320px) / 2)" />
           <div class="img-caption"><h3>Excavator</h3><span class="tag">12 conexiones</span></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 9. STACK -->
+  <!-- 10. STACK -->
   <div class="slide vcenter" style="background:radial-gradient(ellipse at 50% 100%,rgba(124,58,237,.12) 0%,transparent 60%)">
     <div style="width:100%">
       <div class="eyebrow" style="text-align:center;margin-bottom:.5rem">Stack</div>
@@ -388,7 +467,7 @@ python seed.py</pre>
           <div class="icon">🎈</div>
           <h3>Streamlit</h3>
           <p>Interfaz web interactiva</p>
-          <div class="stack-detail">Tab <span>Solve</span>: BFS + faltantes<br>Tab <span>Create Puzzle</span>: carga a Neo4j</div>
+          <div class="stack-detail">Tab <span>Solve</span>: BFS + disponibilidad<br>Tab <span>Create Puzzle</span>: carga a Neo4j</div>
         </div>
       </div>
       <p style="text-align:center;margin-top:1.75rem;font-size:.78rem">
