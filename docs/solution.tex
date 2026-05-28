@@ -49,6 +49,11 @@
 \begin{document}
 
 \maketitle
+
+\begin{center}
+    \small Repositorio: \href{https://github.com/DanielBarillasM/Proyecto-03_Eleccion-de-tecnologias-de-base-de-datos_BD2_seccion-20_Grupo-01}{GitHub — Proyecto 3}
+\end{center}
+
 \tableofcontents
 \newpage
 
@@ -126,7 +131,7 @@ rompecabezas crece, ese costo se vuelve prohibitivo. Para puzzles de juguete de
 pocas piezas sería suficiente, pero no escala bien con la complejidad del grafo.
 
 % ─────────────────────────────────────────────────────────────────────────────
-\section{Diseño del Modelo de Datos}
+    \section{Diseño del Modelo de Datos}
 
 \subsection{Convención de etiquetado físico}
 
@@ -149,6 +154,25 @@ durante el armado.
 Con este esquema, un conector queda identificado unívocamente por el par
 $(\text{pieza},\ \text{etiqueta})$, p.ej.\ \texttt{(1, A)}, y una conexión
 física queda registrada como el par de conectores que encajan entre sí.
+
+Las figuras 1 y 2 muestran dos rompecabezas físicos
+etiquetados siguiendo esta convención.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.78\textwidth]{figs/ples.jpeg}
+    \caption{Rompecabezas \emph{Plesiosaurs}: 10 piezas numeradas y conectores
+             etiquetados con letras (A, B, C\ldots) junto a cada tab o hueco.}
+    \label{fig:ples}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.78\textwidth]{figs/exc.jpeg}
+    \caption{Rompecabezas \emph{Excavator}: 10 piezas numeradas y conectores
+             etiquetados con letras (A, B, C, D) junto a cada conector.}
+    \label{fig:exc}
+\end{figure}
 
 \subsection{Nodos}
 

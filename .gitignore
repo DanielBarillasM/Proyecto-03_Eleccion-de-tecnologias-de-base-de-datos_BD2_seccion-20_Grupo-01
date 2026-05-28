@@ -20,7 +20,6 @@ docs/*.toc
 docs/*.fls
 docs/*.fdb_latexmk
 docs/*.synctex.gz
-docs/*.pdf
 
 # misc
 .DS_Store
