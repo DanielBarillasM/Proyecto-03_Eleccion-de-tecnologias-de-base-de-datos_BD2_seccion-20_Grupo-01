@@ -1,0 +1,55 @@
+{
+  "puzzles": [
+    {
+      "id": "plesiosaurus",
+      "name": "Plesiosaurus",
+      "description": "10-piece wooden puzzle of a plesiosaur. Pieces are numbered 1-10 and represent body parts.",
+      "pieces": [
+        {"id": "P01", "label": "1 - Cabeza"},
+        {"id": "P02", "label": "2 - Cuello inicial"},
+        {"id": "P03", "label": "3 - Cuello medio"},
+        {"id": "P04", "label": "4 - Extremo superior"},
+        {"id": "P05", "label": "5 - Cuerpo central"},
+        {"id": "P06", "label": "6 - Cuerpo inferior superior"},
+        {"id": "P07", "label": "7 - Cuerpo inferior medio"},
+        {"id": "P08", "label": "8 - Base de cola"},
+        {"id": "P09", "label": "9 - Parte trasera"},
+        {"id": "P10", "label": "10 - Cola curva"}
+      ],
+      "connectors": [
+        {"id": "P01_A", "label": "A", "type": "tab",  "piece_id": "P01"},
+        {"id": "P02_A", "label": "A", "type": "hole", "piece_id": "P02"},
+        {"id": "P02_B", "label": "B", "type": "tab",  "piece_id": "P02"},
+        {"id": "P03_B", "label": "B", "type": "hole", "piece_id": "P03"},
+        {"id": "P03_C", "label": "C", "type": "tab",  "piece_id": "P03"},
+        {"id": "P03_D", "label": "D", "type": "tab",  "piece_id": "P03"},
+        {"id": "P04_C", "label": "C", "type": "hole", "piece_id": "P04"},
+        {"id": "P05_D", "label": "D", "type": "hole", "piece_id": "P05"},
+        {"id": "P05_E", "label": "E", "type": "tab",  "piece_id": "P05"},
+        {"id": "P05_F", "label": "F", "type": "tab",  "piece_id": "P05"},
+        {"id": "P06_E", "label": "E", "type": "hole", "piece_id": "P06"},
+        {"id": "P06_G", "label": "G", "type": "tab",  "piece_id": "P06"},
+        {"id": "P07_G", "label": "G", "type": "hole", "piece_id": "P07"},
+        {"id": "P07_H", "label": "H", "type": "tab",  "piece_id": "P07"},
+        {"id": "P08_F", "label": "F", "type": "hole", "piece_id": "P08"},
+        {"id": "P08_H", "label": "H", "type": "hole", "piece_id": "P08"},
+        {"id": "P08_I", "label": "I", "type": "tab",  "piece_id": "P08"},
+        {"id": "P08_J", "label": "J", "type": "tab",  "piece_id": "P08"},
+        {"id": "P09_I", "label": "I", "type": "hole", "piece_id": "P09"},
+        {"id": "P10_J", "label": "J", "type": "hole", "piece_id": "P10"}
+      ],
+      "connections": [
+        ["P01_A", "P02_A"],
+        ["P02_B", "P03_B"],
+        ["P03_C", "P04_C"],
+        ["P03_D", "P05_D"],
+        ["P05_E", "P06_E"],
+        ["P05_F", "P08_F"],
+        ["P06_G", "P07_G"],
+        ["P07_H", "P08_H"],
+        ["P08_I", "P09_I"],
+        ["P08_J", "P10_J"]
+      ]
+    }
+  ]
+}

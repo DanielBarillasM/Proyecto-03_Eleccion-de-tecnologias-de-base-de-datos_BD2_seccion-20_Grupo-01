@@ -1,0 +1,366 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{enumitem}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning}
+
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!70!black}\bfseries,
+    commentstyle=\color{gray},
+    stringstyle=\color{green!50!black},
+    backgroundcolor=\color{gray!8},
+    frame=single,
+    rulecolor=\color{gray!40},
+    breaklines=true,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    xleftmargin=1.5em,
+}
+
+% ── portada ──────────────────────────────────────────────────────────────────
+\title{
+    \LARGE \textbf{Proyecto 3}\\[0.4em]
+    \large Universidad del Valle de Guatemala -- Bases de Datos 2\\
+}
+\author{
+    Hugo Barillas \and
+    Pablo Barillas \and
+    Osman De León \and
+    José Mérida \and
+    Roberto Nájera \and
+    Milton Polanco
+}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Descripción del Problema}
+
+Se nos entregó un rompecabezas físico con piezas interconectadas mediante
+\emph{tabs} (picos) y \emph{huecos}. El objetivo es construir un sistema que
+almacene la estructura del rompecabezas en una base de datos y genere, a partir
+de una pieza inicial, instrucciones ordenadas de ensamblaje. El sistema debe
+manejar el caso de piezas faltantes y seguir armando la mayor parte posible del
+rompecabezas.
+
+Lo importante a notar es que el problema es fundamentalmente \emph{relacional}:
+no importa la forma ni el color de cada pieza, sino únicamente qué conector de
+qué pieza encaja con qué conector de otra pieza. Esta observación es la que
+guía directamente la elección de tecnología.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Justificación de la Elección de Base de Datos}
+
+\subsection{Tecnología seleccionada: Neo4j}
+
+Se eligió \textbf{Neo4j} (base de datos orientada a grafos) porque refleja
+directamente la estructura del problema. En un rompecabezas, el dato central no
+es un atributo de una entidad aislada, sino la \emph{conexión} entre dos
+conectores de piezas distintas. En Neo4j esa conexión es un arco de primer
+nivel que existe por sí mismo; en un modelo relacional sería una fila en una
+tabla de unión que solo cobra sentido al hacer un \textit{JOIN}. Eliminar ese
+nivel de indirección simplifica tanto el modelo como las consultas.
+
+Adicionalmente, Neo4j ofrece ventajas concretas para este dominio:
+
+\begin{itemize}
+    \item \textbf{Traversals nativos.} La pregunta ``¿qué pieza se conecta a
+          esta pieza?'' es un salto de dos arcos en Cypher y no requiere lógica
+          adicional. En SQL la misma consulta involucraría al menos cuatro tablas
+          y varios \texttt{JOIN}.
+
+    \item \textbf{Sin migraciones de esquema.} Añadir un nuevo rompecabezas es
+          insertar un subgrafo aislado; no se modifica ninguna tabla existente ni
+          se corre ningún script de migración.
+
+    \item \textbf{Restricciones de unicidad.} Neo4j soporta restricciones
+          \texttt{UNIQUE} equivalentes a claves primarias relacionales, lo que
+          garantiza integridad referencial sin costo de modelado extra.
+\end{itemize}
+
+\subsection{Comparación con alternativas}
+
+\textbf{PostgreSQL} hubiera sido una opción técnicamente válida, pero introduce
+fricción innecesaria para este dominio. El modelo requeriría al menos cuatro
+tablas (\texttt{puzzles}, \texttt{pieces}, \texttt{connectors},
+\texttt{connections}) y cada consulta de vecindad involucraría múltiples
+\texttt{JOIN}. El BFS en sí requeriría CTEs recursivos, trasladando la lógica
+de traversal al SQL en lugar de mantenerla limpiamente en la capa de aplicación.
+Para un problema donde la relación \emph{es} el dato, un modelo relacional
+añade indirección sin ningún beneficio.
+
+\textbf{MongoDB} maneja bien documentos anidados, lo que lo hace atractivo a
+primera vista: una pieza con sus conectores encaja naturalmente en un documento.
+El problema aparece con las conexiones entre piezas, que son simétricas: el
+conector A de la pieza 1 y el conector B de la pieza 2 se referencian
+mutuamente. Representar esa bidireccionalidad en documentos requiere duplicar la
+referencia en ambos lados y mantenerlos sincronizados manualmente, introduciendo
+una fuente de inconsistencia que Neo4j evita por diseño.
+
+\textbf{DynamoDB} hubiera funcionado para rompecabezas muy pequeños con un
+patrón de acceso simple y bien definido de antemano. Sin embargo, DynamoDB
+está optimizado para lecturas y escrituras de ítems individuales por clave; las
+consultas de vecindad que el BFS necesita requieren o bien un diseño de
+\textit{access patterns} muy cuidadoso con índices secundarios, o bien múltiples
+roundtrips a la base de datos por cada paso del algoritmo. A medida que el
+rompecabezas crece, ese costo se vuelve prohibitivo. Para puzzles de juguete de
+pocas piezas sería suficiente, pero no escala bien con la complejidad del grafo.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Diseño del Modelo de Datos}
+
+\subsection{Convención de etiquetado físico}
+
+Antes de cargar el rompecabezas al sistema, cada pieza y cada conector deben
+etiquetarse físicamente para que el ensamblador pueda identificarlos a mano
+durante el armado.
+
+\begin{itemize}
+    \item \textbf{Piezas}: se escribe un número en la parte delantera de cada
+          pieza para identificarla de forma única dentro del rompecabezas.
+          Se recomienda usar el formato \texttt{<número> - <nombre>} (p.ej.\
+          \texttt{1 - Cabeza}) para que la identificación sea inequívoca incluso
+          cuando varias piezas tienen formas similares.
+    \item \textbf{Conectores}: se escribe una letra o código corto con cinta
+          adhesiva junto a cada conector. La etiqueta es
+          \emph{local} a su pieza, de modo que dos piezas distintas pueden tener
+          un conector \texttt{A} sin conflicto.
+\end{itemize}
+
+Con este esquema, un conector queda identificado unívocamente por el par
+$(\text{pieza},\ \text{etiqueta})$, p.ej.\ \texttt{(1, A)}, y una conexión
+física queda registrada como el par de conectores que encajan entre sí.
+
+\subsection{Nodos}
+
+\begin{description}[leftmargin=3cm, style=sameline]
+    \item[\texttt{:Puzzle}]    \texttt{id}, \texttt{name}, \texttt{description}
+    \item[\texttt{:Piece}]     \texttt{id} (global), \texttt{local\_id}, \texttt{label}, \texttt{puzzle\_id}
+    \item[\texttt{:Connector}] \texttt{id} (global), \texttt{local\_id}, \texttt{label}, \texttt{type} (\texttt{tab}/\texttt{hole}), \texttt{piece\_local\_id}, \texttt{puzzle\_id}
+\end{description}
+
+Tener IDs locales y globales nos permite referenciar una pieza de forma única
+dentro del modelo de datos, pero al mismo tiempo mantener una representación
+corta y legible para presentar al usuario. El ID global se construye
+concatenando el slug del puzzle con el ID local (ver \S\ref{sec:unicidad}), y
+es el que se almacena en Neo4j; el ID local es el que aparece en las
+instrucciones de ensamblaje.
+
+\subsection{Relaciones}
+
+\begin{description}[leftmargin=4.5cm, style=sameline]
+    \item[\texttt{CONTAINS}]       \texttt{(:Puzzle)} $\to$ \texttt{(:Piece)}
+    \item[\texttt{HAS\_CONNECTOR}] \texttt{(:Piece)} $\to$ \texttt{(:Connector)}
+    \item[\texttt{CONNECTS\_WITH}] \texttt{(:Connector)} $\leftrightarrow$ \texttt{(:Connector)} — almacenado en ambas direcciones
+\end{description}
+
+Mediante estas relaciones podemos identificar las piezas que pertenecen a cada
+rompecabezas y todas las conexiones entre ellas. La relación
+\texttt{CONNECTS\_WITH} se almacena en ambas direcciones deliberadamente: así
+cualquier traversal de vecindad puede hacerse con un único patrón
+\texttt{MATCH} sin necesidad de manejar dirección, lo que simplifica
+notablemente las consultas del algoritmo.
+
+\subsection{Diagrama del esquema}
+
+\begin{center}
+\begin{tikzpicture}[
+    node distance=1.8cm and 3cm,
+    box/.style={draw, rounded corners=4pt, minimum width=2.6cm,
+                minimum height=0.9cm, align=center, font=\small\ttfamily},
+    arr/.style={-{Stealth[length=6pt]}, thick},
+]
+    \node[box, fill=violet!15] (puz) {:Puzzle};
+    \node[box, fill=blue!12,   right=of puz] (pc)  {:Piece};
+    \node[box, fill=teal!15,   right=of pc]  (cn)  {:Connector};
+
+    \draw[arr] (puz) -- node[above,font=\scriptsize]{CONTAINS}       (pc);
+    \draw[arr] (pc)  -- node[above,font=\scriptsize]{HAS\_CONNECTOR} (cn);
+    \draw[arr] (cn)  edge[loop right, looseness=6]
+               node[right,font=\scriptsize]{CONNECTS\_WITH}          (cn);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Escalabilidad del modelo}
+
+El modelo escala bien en ambas dimensiones relevantes. Agregar un nuevo
+rompecabezas es insertar un subgrafo completamente aislado: no afecta los nodos
+ni las relaciones de puzzles existentes, no requiere modificar el esquema y no
+introduce ningún tipo de contención. Agregar piezas o conectores a un puzzle
+existente sigue el mismo patrón: nodos nuevos enlazados al subgrafo
+correspondiente. El namespacing por \texttt{puzzle\_id} garantiza que el
+crecimiento horizontal entre puzzles nunca genere colisiones, y las restricciones
+\texttt{UNIQUE} mantienen la integridad sin degradación de rendimiento gracias a
+los índices que Neo4j crea automáticamente al definirlas.
+
+\subsection{Unicidad global entre rompecabezas}
+\label{sec:unicidad}
+
+Neo4j comparte un único grafo de propiedades entre todos los rompecabezas
+almacenados. Dado que los IDs de piezas y conectores son locales a su puzzle
+(dos puzzles distintos pueden tener una pieza \texttt{P01}), es necesario
+garantizar unicidad global. Para ello, los IDs de \texttt{:Piece} y
+\texttt{:Connector} se construyen concatenando el slug del puzzle con el ID
+local:
+
+\[
+    \texttt{id} = \texttt{"<puzzle\_id>\_\_<local\_id>"}
+\]
+
+Se crean tres restricciones \texttt{UNIQUE} (Puzzle.id, Piece.id, Connector.id)
+al inicializar la base de datos, de forma que un intento de insertar dos nodos
+con el mismo ID global falle a nivel de base de datos antes de llegar a la
+lógica de aplicación.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Implementación del Modelo}
+
+La carga de datos sigue un orden determinado: primero el nodo \texttt{:Puzzle},
+luego cada \texttt{:Piece} enlazada con \texttt{CONTAINS}, luego cada
+\texttt{:Connector} enlazado con \texttt{HAS\_CONNECTOR}, y finalmente las
+relaciones \texttt{CONNECTS\_WITH} entre pares de conectores. Se utiliza
+\texttt{MERGE} en lugar de \texttt{CREATE} para que la operación sea idempotente:
+ejecutar el seed dos veces no duplica datos.
+
+\begin{lstlisting}[language=SQL, caption={Inserción de un rompecabezas en Neo4j}]
+-- Nodo Puzzle
+MERGE (puz:Puzzle {id: $pid})
+SET puz.name = $name, puz.description = $desc;
+
+-- Nodo Piece
+MATCH (puz:Puzzle {id: $pid})
+MERGE (pc:Piece {id: $gid})
+SET pc.local_id=$lid, pc.label=$label, pc.puzzle_id=$pid
+MERGE (puz)-[:CONTAINS]->(pc);
+
+-- Nodo Connector
+MATCH (pc:Piece {id: $piece_gid})
+MERGE (c:Connector {id: $gid})
+SET c.local_id=$lid, c.label=$label, c.type=$type,
+    c.piece_local_id=$plid, c.puzzle_id=$pid
+MERGE (pc)-[:HAS_CONNECTOR]->(c);
+
+-- Relacion CONNECTS_WITH (bidireccional)
+MATCH (ca:Connector {id: $ga}), (cb:Connector {id: $gb})
+MERGE (ca)-[:CONNECTS_WITH]->(cb)
+MERGE (cb)-[:CONNECTS_WITH]->(ca);
+\end{lstlisting}
+
+El rompecabezas de prueba cargado es un \textbf{Plesiosaurio} con 10 piezas
+(P01--P10), conectores etiquetados A--J y 10 conexiones que forman la columna
+vertebral y extremidades del animal. Este puzzle sirve para validar tanto el
+caso completo (todas las piezas disponibles) como el caso parcial (una o más
+piezas marcadas como faltantes).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Algoritmo de Resolución}
+
+\subsection{Descripción}
+
+El algoritmo aplica \textbf{BFS (Breadth First Search)} sobre el grafo de
+piezas, expandiendo la frontera conector por conector a partir de una pieza
+inicial elegida por el usuario. Se elige BFS sobre DFS porque produce
+instrucciones en orden de distancia desde la pieza inicial, lo que resulta más
+natural para un ensamblador físico: primero se colocan las piezas directamente
+adyacentes, luego las que están a dos pasos, y así sucesivamente.
+
+\begin{description}[leftmargin=2.5cm]
+    \item[Entrada]  Grafo $G = (P, C, E)$, pieza inicial $s \in P$, conjunto de piezas faltantes $M \subseteq P$.
+    \item[Salida]   Lista ordenada de pasos de ensamblaje, cada uno con estado
+                    \texttt{start}, \texttt{placed} o \texttt{missing}.
+\end{description}
+
+\subsection{Pseudocódigo}
+
+\begin{lstlisting}[mathescape=true, caption={BFS de ensamblaje}]
+visited = {s};  queue = [s]
+emitir paso START: "Coloca la pieza s como punto de partida"
+
+mientras queue no este vacio:
+    u = queue.pop_left()
+    para cada conector $c_u$ de u:
+        $c_v$ = vecino($c_u$)          // CONNECTS_WITH en Neo4j
+        v  = pieza($c_v$)
+        si v en M (faltante) y no reportada:
+            emitir paso MISSING
+            continuar
+        si v en visited: continuar
+        visited.add(v);  queue.append(v)
+        emitir paso PLACED:
+            "Toma la pieza v, conecta su $c_v$.tipo '$c_v$.label'
+             al $c_u$.tipo '$c_u$.label' de la pieza u"
+
+para cada p en P - visited - M:
+    emitir paso MISSING: "pieza p disponible pero inalcanzable"
+\end{lstlisting}
+
+La complejidad del algoritmo es $\mathcal{O}(n + m)$ donde $n = |P|$ es el
+número de piezas y $m = |E|$ el número de conexiones. Cada pieza se visita a lo
+sumo una vez y cada conexión se examina a lo sumo dos veces (una desde cada
+extremo), por lo que el algoritmo escala linealmente con el tamaño del
+rompecabezas.
+
+\subsection{Uso de Neo4j en el algoritmo}
+
+Al cargar el rompecabezas, se ejecuta una única consulta Cypher que materializa
+el mapa completo de vecinos (\texttt{connector\_id} $\to$ \texttt{connector\_id})
+en memoria:
+
+\begin{lstlisting}[language=SQL]
+MATCH (:Puzzle {id: $pid})-[:CONTAINS]->(:Piece)
+      -[:HAS_CONNECTOR]->(ca:Connector)
+      -[:CONNECTS_WITH]->(cb:Connector)
+WHERE ca.puzzle_id = $pid AND cb.puzzle_id = $pid
+  AND ca.local_id < cb.local_id
+RETURN ca.local_id AS a, cb.local_id AS b;
+\end{lstlisting}
+
+El BFS opera sobre este mapa en memoria; la base de datos provee la
+representación persistente y compartida. Dado que la cantidad de datos por
+rompecabezas es pequeña (decenas o cientos de piezas), cargar el grafo completo
+de una sola vez es más eficiente que consultar Neo4j por cada paso del BFS,
+evitando la latencia de red en cada iteración.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Manejo de Piezas Faltantes}
+
+Una de las funcionalidades clave del sistema es continuar generando
+instrucciones útiles incluso cuando algunas piezas no están disponibles. Cuando
+durante el BFS se encuentra una pieza $v \in M$:
+
+\begin{enumerate}
+    \item Se registra un paso \texttt{MISSING} indicando qué conector debería
+          unirse y de qué pieza, para que el ensamblador sepa qué falta.
+    \item No se encola $v$, bloqueando esa rama de expansión y evitando
+          instrucciones que no se pueden ejecutar.
+    \item Las piezas alcanzables por rutas alternativas (que no pasen por $v$)
+          se ensamblan con normalidad, aprovechando al máximo las piezas disponibles.
+    \item Al finalizar, las piezas disponibles pero inalcanzables debido al
+          bloqueo se reportan explícitamente, dando al ensamblador una imagen
+          completa del estado del rompecabezas.
+\end{enumerate}
+
+Esto refleja el comportamiento físico deseado: el ensamblador arma todo lo
+posible, recibe una notificación clara de qué sección no puede completarse y
+por qué, y puede retomar el armado si la pieza faltante aparece posteriormente.
+
+\end{document}
