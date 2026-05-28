@@ -9,6 +9,7 @@ class Piece:
     id: str
     label: str
     puzzle_id: str
+    available: bool = True
 
 
 @dataclass(frozen=True)

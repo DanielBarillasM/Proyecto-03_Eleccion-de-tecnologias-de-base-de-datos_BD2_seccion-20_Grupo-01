@@ -92,9 +92,10 @@ class Neo4jPuzzleRepository:
                 s.run(
                     "MATCH (puz:Puzzle {id:$pid}) "
                     "MERGE (pc:Piece {id:$gid}) "
-                    "SET pc.local_id=$lid, pc.label=$label, pc.puzzle_id=$pid "
+                    "SET pc.local_id=$lid, pc.label=$label, pc.puzzle_id=$pid, pc.available=$available "
                     "MERGE (puz)-[:CONTAINS]->(pc)",
                     pid=pid, gid=_g(pid, piece.id), lid=piece.id, label=piece.label,
+                    available=piece.available,
                 )
 
             for conn in graph.connectors.values():
@@ -121,6 +122,13 @@ class Neo4jPuzzleRepository:
                     ga=_g(pid, a), gb=_g(pid, b),
                 )
 
+    def set_piece_availability(self, puzzle_id: str, piece_id: str, available: bool) -> None:
+        with self.driver.session(database=self.database) as s:
+            s.run(
+                "MATCH (pc:Piece {id:$gid}) SET pc.available = $available",
+                gid=_g(puzzle_id, piece_id), available=available,
+            )
+
     # ── read ──────────────────────────────────────────────────────────────────
 
     def list_puzzles(self) -> List[PuzzleGraph]:
@@ -146,6 +154,7 @@ class Neo4jPuzzleRepository:
                     id=r["pc"]["local_id"],
                     label=r["pc"]["label"],
                     puzzle_id=puzzle_id,
+                    available=r["pc"].get("available", True),
                 )
                 for r in piece_rows
             }

@@ -26,7 +26,7 @@ _STEP_STYLE = {
 
 
 def _save_puzzle(puzzle: dict) -> None:
-    pieces = {p["id"]: Piece(id=p["id"], label=p["label"], puzzle_id=puzzle["id"]) for p in puzzle["pieces"]}
+    pieces = {p["id"]: Piece(id=p["id"], label=p["label"], puzzle_id=puzzle["id"], available=p.get("available", True)) for p in puzzle["pieces"]}
     connectors = {c["id"]: Connector(id=c["id"], label=c["label"], type=c["type"], piece_id=c["piece_id"]) for c in puzzle["connectors"]}
     graph = PuzzleGraph(
         id=puzzle["id"],
@@ -50,7 +50,6 @@ def _next_piece_id(pieces: list) -> str:
 # ── solve tab ─────────────────────────────────────────────────────────────────
 
 def _solve_tab(ss: dict) -> None:
-    ss.setdefault("extra_missing", set())
     ss.setdefault("result", None)
 
     all_puzzles = _repo.list_puzzles()
@@ -65,28 +64,44 @@ def _solve_tab(ss: dict) -> None:
         puzzle_id = st.selectbox("Puzzle", list(puzzle_map.keys()), format_func=lambda k: puzzle_map[k])
 
         if ss.get("_last_puzzle") != puzzle_id:
-            ss["extra_missing"] = set()
             ss["result"] = None
             ss["_last_puzzle"] = puzzle_id
 
         graph: PuzzleGraph = _repo.get(puzzle_id)
+        available_ids = [pid for pid, p in graph.pieces.items() if p.available]
         piece_map = {pid: p.label for pid, p in graph.pieces.items()}
 
-        start_id = st.selectbox("Start piece", list(piece_map.keys()), format_func=lambda k: piece_map[k])
-
-        ms_selected = st.multiselect(
-            "Missing pieces",
-            [pid for pid in piece_map if pid != start_id],
+        start_id = st.selectbox(
+            "Start piece",
+            available_ids,
             format_func=lambda k: piece_map[k],
-            placeholder="None",
         )
-        missing = set(ms_selected) | ss["extra_missing"]
+
+        st.markdown("**Pieces**")
+        for pid, piece in graph.pieces.items():
+            col_label, col_btn = st.columns([3, 1], vertical_alignment="center")
+            col_label.markdown(
+                f"{'🔴' if not piece.available else '🟢'} {piece.label}",
+                unsafe_allow_html=False,
+            )
+            if piece.available:
+                if col_btn.button("Missing", key=f"miss_{pid}", use_container_width=True):
+                    _repo.set_piece_availability(puzzle_id, pid, False)
+                    ss["result"] = None
+                    st.rerun()
+            else:
+                if col_btn.button("Restore", key=f"rest_{pid}", use_container_width=True):
+                    _repo.set_piece_availability(puzzle_id, pid, True)
+                    ss["result"] = None
+                    st.rerun()
+
+        st.divider()
+        missing = {pid for pid, p in graph.pieces.items() if not p.available}
 
         c1, c2 = st.columns(2)
         if c1.button("Solve", type="primary", use_container_width=True):
             ss["result"] = _solver.solve(graph, start_id, missing)
         if c2.button("Clear", use_container_width=True):
-            ss["extra_missing"] = set()
             ss["result"] = None
             st.rerun()
 
@@ -102,7 +117,6 @@ def _solve_tab(ss: dict) -> None:
             st.write("Press **Solve** to generate instructions.")
         else:
             html_parts = []
-            placed_pieces = {}
             for step in ss["result"].steps:
                 style = _STEP_STYLE.get(step.status, "background:#f1f5f9;border-left:3px solid #94a3b8")
                 html_parts.append(
@@ -110,23 +124,7 @@ def _solve_tab(ss: dict) -> None:
                     f'font-size:0.87rem;margin-bottom:4px">'
                     f'<b>{step.step_number}.</b> {step.instruction}</div>'
                 )
-                if step.status == "placed" and step.piece_id in graph.pieces:
-                    placed_pieces[step.piece_id] = graph.pieces[step.piece_id].label
-
             st.markdown("\n".join(html_parts), unsafe_allow_html=True)
-
-            if placed_pieces:
-                st.divider()
-                pick_col, btn_col = st.columns([3, 1], vertical_alignment="bottom")
-                picked = pick_col.selectbox(
-                    "Don't have a piece?",
-                    options=list(placed_pieces.keys()),
-                    format_func=lambda k: placed_pieces[k],
-                )
-                if btn_col.button("❌ Mark missing", type="primary"):
-                    ss["extra_missing"].add(picked)
-                    ss["result"] = _solver.solve(graph, start_id, set(ms_selected) | ss["extra_missing"])
-                    st.rerun()
 
 
 # ── create tab ────────────────────────────────────────────────────────────────

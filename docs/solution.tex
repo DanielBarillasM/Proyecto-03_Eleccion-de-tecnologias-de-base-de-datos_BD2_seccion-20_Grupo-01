@@ -178,7 +178,7 @@ etiquetados siguiendo esta convención.
 
 \begin{description}[leftmargin=3cm, style=sameline]
     \item[\texttt{:Puzzle}]    \texttt{id}, \texttt{name}, \texttt{description}
-    \item[\texttt{:Piece}]     \texttt{id} (global), \texttt{local\_id}, \texttt{label}, \texttt{puzzle\_id}
+    \item[\texttt{:Piece}]     \texttt{id} (global), \texttt{local\_id}, \texttt{label}, \texttt{puzzle\_id}, \texttt{available} (bool)
     \item[\texttt{:Connector}] \texttt{id} (global), \texttt{local\_id}, \texttt{label}, \texttt{type} (\texttt{tab}/\texttt{hole}), \texttt{piece\_local\_id}, \texttt{puzzle\_id}
 \end{description}
 
@@ -367,9 +367,29 @@ evitando la latencia de red en cada iteración.
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Manejo de Piezas Faltantes}
 
-Una de las funcionalidades clave del sistema es continuar generando
-instrucciones útiles incluso cuando algunas piezas no están disponibles. Cuando
-durante el BFS se encuentra una pieza $v \in M$:
+La disponibilidad de cada pieza se almacena directamente en la base de datos
+como una propiedad booleana \texttt{available} en el nodo \texttt{:Piece}.
+Esto significa que el estado de faltante es persistente entre sesiones y
+compartido por todos los usuarios del sistema, en lugar de ser un parámetro
+transitorio pasado en tiempo de ejecución.
+
+\begin{lstlisting}[language=SQL, caption={Actualizar disponibilidad de una pieza en Neo4j}]
+MATCH (pc:Piece {id: $global_id})
+SET pc.available = false;   -- marcar como faltante
+SET pc.available = true;    -- restaurar
+\end{lstlisting}
+
+Al iniciar el BFS, el sistema consulta el grafo cargado en memoria y deriva
+automáticamente el conjunto de piezas faltantes $M$ a partir de los nodos
+con \texttt{available = false}:
+
+\[
+    M = \{\, p \in P \mid p.\texttt{available} = \texttt{false} \,\}
+\]
+
+Desde la interfaz, el usuario puede marcar o restaurar cualquier pieza con un
+botón por pieza antes de resolver. El cambio se persiste en Neo4j
+inmediatamente. Cuando durante el BFS se encuentra una pieza $v \in M$:
 
 \begin{enumerate}
     \item Se registra un paso \texttt{MISSING} indicando qué conector debería
@@ -386,5 +406,7 @@ durante el BFS se encuentra una pieza $v \in M$:
 Esto refleja el comportamiento físico deseado: el ensamblador arma todo lo
 posible, recibe una notificación clara de qué sección no puede completarse y
 por qué, y puede retomar el armado si la pieza faltante aparece posteriormente.
+Al restaurar una pieza en la interfaz, el cambio se escribe a Neo4j y la
+siguiente resolución ya la incluye automáticamente.
 
 \end{document}

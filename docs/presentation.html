@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proyecto 3 — Puzzle Graph Solver</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #7c3aed;
+      --accent2: #06b6d4;
+      --text: #e2e8f0;
+      --muted: #64748b;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { width: 100vw; height: 100vh; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; }
+
+    /* ── deck & slides ── */
+    #deck { position: relative; width: 100vw; height: 100vh; }
+
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 2.75rem 5.5rem 3.25rem;
+      gap: 1rem;
+      opacity: 0; transform: translateX(48px);
+      pointer-events: none;
+      transition: opacity .35s ease, transform .35s ease;
+    }
+    .slide.active  { opacity: 1; transform: translateX(0); pointer-events: all; }
+    .slide.exit    { opacity: 0; transform: translateX(-48px); }
+    .slide.vcenter { align-items: center; text-align: center; }
+
+    /* ── nav chrome ── */
+    .nav-btn {
+      position: fixed; top: 50%; transform: translateY(-50%);
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); cursor: pointer; font-size: .9rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: color .2s, border-color .2s; z-index: 50;
+    }
+    .nav-btn:hover { color: var(--text); border-color: var(--accent); }
+    #prev { left: 1.25rem; } #next { right: 1.25rem; }
+
+    #dots {
+      position: fixed; bottom: 1.4rem; left: 50%; transform: translateX(-50%);
+      display: flex; gap: .45rem; z-index: 50;
+    }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); cursor: pointer; transition: all .25s; }
+    .dot.active { background: var(--accent); width: 18px; border-radius: 3px; }
+
+    #counter { position: fixed; bottom: 1.4rem; right: 1.75rem; font-size: .7rem; color: var(--muted); z-index: 50; }
+
+    /* ── type ── */
+    .eyebrow { font-size: .68rem; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; }
+    h1 { font-size: clamp(2.4rem, 5vw, 3.8rem); font-weight: 800; letter-spacing: -.03em; line-height: 1.1; }
+    h1 em { color: var(--accent); font-style: normal; }
+    h2 { font-size: clamp(1.4rem, 2.4vw, 1.9rem); font-weight: 700; letter-spacing: -.02em; }
+    h3 { font-size: .88rem; font-weight: 600; }
+    p  { color: #94a3b8; font-size: clamp(.78rem, 1.15vw, .9rem); line-height: 1.65; }
+    code { color: #a78bfa; font-family: monospace; font-size: .9em; }
+
+    .badge {
+      display: inline-flex; align-items: center;
+      background: rgba(124,58,237,.15); border: 1px solid rgba(124,58,237,.4);
+      color: #a78bfa; font-size: .68rem; padding: .2rem .75rem;
+      border-radius: 999px; letter-spacing: .07em; text-transform: uppercase;
+    }
+
+    .subtitle { color: var(--muted); font-size: clamp(.95rem, 1.5vw, 1.15rem); max-width: 500px; }
+
+    .authors { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: center; margin-top: .5rem; }
+    .authors span { background: var(--surface); border: 1px solid var(--border); font-size: .73rem; padding: .2rem .65rem; border-radius: 999px; color: var(--muted); }
+
+    /* ── cards ── */
+    .cards { display: grid; gap: .8rem; }
+    .cards.c2 { grid-template-columns: 1fr 1fr; }
+    .cards.c3 { grid-template-columns: repeat(3, 1fr); }
+    .cards.c4 { grid-template-columns: repeat(4, 1fr); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: .3rem; }
+    .card .icon { font-size: 1.25rem; }
+    .card h3 { font-size: .85rem; }
+    .card p { font-size: .78rem; }
+
+    /* ── table ── */
+    table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    th { text-align: left; padding: .45rem .85rem; background: var(--surface); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+    td { padding: .45rem .85rem; border-bottom: 1px solid var(--border); color: #94a3b8; }
+    tr:last-child td { border-bottom: none; }
+    .yes { color: #4ade80; font-weight: 600; }
+    .no  { color: #f87171; }
+    .ok  { color: #fbbf24; }
+
+    /* ── schema ── */
+    .schema { display: flex; align-items: center; flex-wrap: wrap; gap: 0; }
+    .snode { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .55rem 1rem; font-family: monospace; font-size: .78rem; line-height: 1.5; white-space: nowrap; }
+    .snode small { color: var(--muted); font-size: .65rem; display: block; }
+    .snode.purple { border-color: #7c3aed; color: #a78bfa; }
+    .snode.blue   { border-color: #2563eb; color: #93c5fd; }
+    .snode.teal   { border-color: #0891b2; color: #67e8f9; }
+    .sedge { display: flex; flex-direction: column; align-items: center; padding: 0 .4rem; font-size: .58rem; color: var(--muted); gap: 2px; }
+    .sedge .ln { display: flex; align-items: center; }
+    .sedge .ln::before { content:''; display:block; width:24px; height:1px; background:var(--muted); }
+    .sedge .ln::after  { content:'▶'; font-size:.5rem; }
+
+    /* ── steps ── */
+    .steps { display: flex; flex-direction: column; gap: .55rem; }
+    .step { display: flex; gap: .8rem; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .75rem .9rem; }
+    .step .n { min-width: 22px; height: 22px; background: rgba(124,58,237,.2); color: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .68rem; font-weight: 700; flex-shrink: 0; margin-top: .05rem; }
+    .step h3 { font-size: .82rem; margin-bottom: .15rem; }
+    .step p  { font-size: .76rem; margin: 0; }
+
+    /* ── pills ── */
+    .pills { display: flex; gap: .55rem; flex-wrap: wrap; }
+    .pill { padding: .3rem .85rem; border-radius: 7px; font-size: .76rem; font-weight: 600; }
+    .pill.start   { background: #ede9fe; color: #7c3aed; }
+    .pill.placed  { background: #dcfce7; color: #16a34a; }
+    .pill.missing { background: #fee2e2; color: #dc2626; }
+
+    /* ── code ── */
+    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .8rem 1rem; font-size: .72rem; color: #94a3b8; overflow-x: auto; line-height: 1.6; }
+    .kw { color: #a78bfa; } .cm { color: #475569; font-style: italic; }
+
+    /* ── callout ── */
+    .callout { background: rgba(124,58,237,.08); border: 1px solid rgba(124,58,237,.25); border-radius: 10px; padding: .9rem 1.1rem; }
+    .callout p { color: var(--text); font-size: .84rem; }
+
+    /* ── two-column split ── */
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    .split > div { display: flex; flex-direction: column; gap: .75rem; }
+
+    /* ── images ── */
+    .img-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .img-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .img-card img { width: 100%; height: 220px; object-fit: cover; display: block; }
+    .img-caption { padding: .6rem 1rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .img-caption h3 { font-size: .82rem; margin: 0; }
+    .tag { background: rgba(6,182,212,.1); border: 1px solid rgba(6,182,212,.3); color: var(--accent2); font-size: .65rem; padding: .1rem .45rem; border-radius: 4px; white-space: nowrap; }
+
+    /* ── missing steps ── */
+    .msteps { display: flex; flex-direction: column; gap: .55rem; }
+    .mstep { display: flex; gap: .75rem; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .7rem .9rem; }
+    .mbullet { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: .35rem; }
+    .mstep p { font-size: .8rem; margin: 0; }
+
+    /* ── stack cards ── */
+    .stack-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; }
+    .stack-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem 1.25rem; text-align: center; display: flex; flex-direction: column; align-items: center; gap: .45rem; }
+    .stack-card .icon { font-size: 1.9rem; }
+    .stack-card h3 { font-size: .95rem; }
+    .stack-card p { font-size: .78rem; }
+    .stack-detail { width: 100%; text-align: left; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: .4rem .7rem; font-size: .72rem; color: var(--muted); margin-top: .25rem; line-height: 1.7; }
+    .stack-detail span { color: var(--accent2); }
+  </style>
+</head>
+<body>
+<div id="deck">
+
+  <!-- 1. HERO -->
+  <div class="slide vcenter active" style="background:radial-gradient(ellipse at 50% 0%,rgba(124,58,237,.18) 0%,transparent 65%)">
+    <div class="badge" style="margin-bottom:1.25rem">Bases de Datos 2 · UVG · 2025</div>
+    <h1>Puzzle <em>Graph</em> Solver</h1>
+    <p class="subtitle" style="margin-top:.75rem">Modelado de rompecabezas físicos como grafos y generación de instrucciones de ensamblaje con BFS sobre Neo4j.</p>
+    <div class="authors">
+      <span>Hugo Barillas</span><span>Pablo Barillas</span><span>Osman De León</span>
+      <span>José Mérida</span><span>Roberto Nájera</span><span>Milton Polanco</span>
+    </div>
+  </div>
+
+  <!-- 2. PROBLEMA -->
+  <div class="slide">
+    <div class="eyebrow">01 — El Problema</div>
+    <h2>Rompecabezas físicos como grafos</h2>
+    <p style="max-width:680px">Rompecabezas de madera con piezas interconectadas mediante <strong style="color:var(--text)">tabs</strong> (picos) y <strong style="color:var(--text)">huecos</strong>. El sistema almacena la estructura y genera instrucciones ordenadas de ensamblaje manejando piezas faltantes.</p>
+    <div class="cards c3">
+      <div class="card"><div class="icon">🔢</div><h3>Piezas numeradas</h3><p>Número físico único + etiqueta descriptiva para identificar cada pieza durante el armado.</p></div>
+      <div class="card"><div class="icon">🔌</div><h3>Conectores etiquetados</h3><p>Cada tab o hueco lleva una letra local (A, B, C…) marcada con cinta adhesiva, local a la pieza.</p></div>
+      <div class="card"><div class="icon">⚠️</div><h3>Piezas faltantes</h3><p>El sistema arma todo lo posible y reporta exactamente qué sección no puede completarse.</p></div>
+    </div>
+    <div class="callout">
+      <p>El problema es fundamentalmente <strong>relacional</strong> — no importa la forma ni el color de cada pieza, sino únicamente qué conector encaja con cuál. Esa observación guía la elección de tecnología.</p>
+    </div>
+  </div>
+
+  <!-- 3. ETIQUETADO FÍSICO -->
+  <div class="slide">
+    <div class="eyebrow">01 — El Problema</div>
+    <h2>Etiquetado físico de los rompecabezas</h2>
+    <p>Un conector queda identificado unívocamente por el par <code>(pieza, etiqueta)</code> — p.ej. <code>(3, B)</code>. Una conexión es el par de conectores que encajan entre sí.</p>
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="figs/ples.jpeg" alt="Plesiosaurs" style="height:calc(100vh - 260px)" />
+        <div class="img-caption"><h3>Plesiosaurs</h3><span class="tag">10 piezas · A/B/C por pieza</span></div>
+      </div>
+      <div class="img-card">
+        <img src="figs/exc.jpeg" alt="Excavator" style="height:calc(100vh - 260px)" />
+        <div class="img-caption"><h3>Excavator</h3><span class="tag">10 piezas · A/B/C/D por pieza</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. POR QUÉ NEO4J -->
+  <div class="slide">
+    <div class="eyebrow">02 — Tecnología</div>
+    <h2>¿Por qué Neo4j?</h2>
+    <p>En un rompecabezas, el dato central <em>es la conexión</em>. En Neo4j existe como arco de primer nivel; en SQL sería una fila en una tabla de unión que solo cobra sentido con un JOIN.</p>
+    <table>
+      <thead><tr><th>Base de datos</th><th>Traversal vecindad</th><th>Bidireccionalidad</th><th>Sin migraciones</th><th>Veredicto</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Neo4j</strong></td><td class="yes">2 arcos en Cypher</td><td class="yes">Nativo</td><td class="yes">Sí</td><td class="yes">✓ Elegido</td></tr>
+        <tr><td>PostgreSQL</td><td class="no">4+ tablas + JOINs</td><td class="ok">CTE recursivo</td><td class="no">Requiere migraciones</td><td class="no">Fricción innecesaria</td></tr>
+        <tr><td>MongoDB</td><td class="ok">Docs anidados</td><td class="no">Duplicar referencias</td><td class="ok">Flexible</td><td class="no">Riesgo inconsistencia</td></tr>
+        <tr><td>DynamoDB</td><td class="no">Múltiples roundtrips</td><td class="no">Índices secundarios</td><td class="ok">Sí</td><td class="no">No escala</td></tr>
+      </tbody>
+    </table>
+    <div class="cards c2">
+      <div class="card"><h3>Traversals nativos</h3><p>La pregunta «¿qué pieza se conecta a esta?» es un salto de dos arcos en Cypher. En SQL involucraría cuatro tablas y varios JOINs.</p></div>
+      <div class="card"><h3>Subgrafo aislado por puzzle</h3><p>Agregar un nuevo rompecabezas es insertar un subgrafo sin tocar los existentes. Sin scripts de migración.</p></div>
+    </div>
+  </div>
+
+  <!-- 5. MODELO -->
+  <div class="slide">
+    <div class="eyebrow">03 — Modelo de Datos</div>
+    <h2>Nodos, relaciones y unicidad</h2>
+    <div class="schema">
+      <div class="snode purple">:Puzzle<small>id · name · description</small></div>
+      <div class="sedge"><div class="ln"></div>CONTAINS</div>
+      <div class="snode blue">:Piece<small>id · local_id · label · puzzle_id</small></div>
+      <div class="sedge"><div class="ln"></div>HAS_CONNECTOR</div>
+      <div class="snode teal">:Connector<small>id · local_id · label · type</small></div>
+      <div class="sedge"><div class="ln"></div>CONNECTS_WITH ↔</div>
+      <div class="snode teal">:Connector</div>
+    </div>
+    <div class="cards c3">
+      <div class="card"><h3>IDs globales</h3><p>Formato <code>puzzle_id__local_id</code> — dos puzzles distintos pueden tener P01 sin colisión en Neo4j.</p></div>
+      <div class="card"><h3>3 constraints UNIQUE</h3><p><code>Puzzle.id</code>, <code>Piece.id</code>, <code>Connector.id</code> — creadas automáticamente al correr <code>seed.py</code>.</p></div>
+      <div class="card"><h3>CONNECTS_WITH bidireccional</h3><p>Almacenado en ambas direcciones — cualquier traversal funciona con un único patrón MATCH sin manejar dirección.</p></div>
+    </div>
+    <pre><span class="cm">-- Inserción idempotente con MERGE (ambas direcciones)</span>
+<span class="kw">MATCH</span> (ca:Connector {id:$ga}), (cb:Connector {id:$gb})
+<span class="kw">MERGE</span> (ca)-[:CONNECTS_WITH]->(cb)
+<span class="kw">MERGE</span> (cb)-[:CONNECTS_WITH]->(ca);</pre>
+  </div>
+
+  <!-- 6. BFS -->
+  <div class="slide">
+    <div class="eyebrow">04 — Algoritmo</div>
+    <h2>BFS de ensamblaje &nbsp;<span style="font-size:.8rem;color:var(--muted);font-weight:400">O(n + m)</span></h2>
+    <div class="split">
+      <div>
+        <p>BFS desde una pieza inicial elegida por el usuario. Instrucciones en orden de distancia — primero adyacentes, luego a dos pasos.</p>
+        <div class="steps">
+          <div class="step"><div class="n">1</div><div><h3>Cargar grafo en memoria</h3><p>Una consulta Cypher materializa todos los vecinos. Sin latencia de red por iteración del BFS.</p></div></div>
+          <div class="step"><div class="n">2</div><div><h3>Expandir desde pieza inicial</h3><p>Por cada conector se consulta su vecino vía CONNECTS_WITH y se encola si no fue visitado.</p></div></div>
+          <div class="step"><div class="n">3</div><div><h3>Manejar piezas faltantes</h3><p>Pieza faltante → MISSING emitido, rama bloqueada sin abortar el recorrido.</p></div></div>
+          <div class="step"><div class="n">4</div><div><h3>Reportar inalcanzables</h3><p>Piezas disponibles pero bloqueadas por un faltante se reportan al finalizar.</p></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="pills">
+          <div class="pill start">⬤ START</div>
+          <div class="pill placed">⬤ PLACED</div>
+          <div class="pill missing">⬤ MISSING</div>
+        </div>
+        <pre><span class="cm">-- vecindad materializada al inicio</span>
+<span class="kw">MATCH</span> (:Puzzle {id:$pid})
+  -[:CONTAINS]->(:Piece)
+  -[:HAS_CONNECTOR]->(ca:Connector)
+  -[:CONNECTS_WITH]->(cb:Connector)
+<span class="kw">WHERE</span> ca.puzzle_id = $pid
+  <span class="kw">AND</span> cb.puzzle_id = $pid
+  <span class="kw">AND</span> ca.local_id &lt; cb.local_id
+<span class="kw">RETURN</span> ca.local_id <span class="kw">AS</span> a,
+       cb.local_id <span class="kw">AS</span> b;</pre>
+        <div class="callout">
+          <p>Cargar el grafo de una sola vez evita la latencia de red en cada iteración — más eficiente que consultar Neo4j por cada paso del BFS.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. PIEZAS FALTANTES -->
+  <div class="slide">
+    <div class="eyebrow">04 — Algoritmo</div>
+    <h2>Manejo de piezas faltantes</h2>
+    <p style="max-width:700px">La disponibilidad de cada pieza se persiste en Neo4j como propiedad <code>available</code> del nodo <code>:Piece</code>. Desde la interfaz el usuario puede marcar o restaurar piezas — el cambio se escribe inmediatamente a la base de datos.</p>
+    <div class="split">
+      <div>
+        <pre><span class="cm">-- marcar / restaurar desde Neo4j</span>
+<span class="kw">MATCH</span> (pc:Piece {id:$gid})
+<span class="kw">SET</span>   pc.available = false;  <span class="cm">-- faltante</span>
+<span class="kw">SET</span>   pc.available = true;   <span class="cm">-- restaurar</span></pre>
+        <div class="msteps" style="margin-top:.5rem">
+          <div class="mstep"><div class="mbullet" style="background:#f87171"></div><p><strong style="color:var(--text)">MISSING emitido.</strong> Se registra qué conector debería unirse y de qué pieza falta.</p></div>
+          <div class="mstep"><div class="mbullet" style="background:#f87171"></div><p><strong style="color:var(--text)">Rama bloqueada.</strong> La pieza faltante no se encola — sin instrucciones imposibles de ejecutar.</p></div>
+          <div class="mstep"><div class="mbullet" style="background:#fbbf24"></div><p><strong style="color:var(--text)">Rutas alternativas.</strong> Piezas alcanzables por caminos que no pasan por la faltante se ensamblan normal.</p></div>
+          <div class="mstep"><div class="mbullet" style="background:#4ade80"></div><p><strong style="color:var(--text)">Reporte final.</strong> Piezas disponibles pero inalcanzables se listan al terminar.</p></div>
+        </div>
+      </div>
+      <div>
+        <pre><span class="cm">-- el BFS deriva M desde el grafo</span>
+M = {p ∈ P | p.available = false}
+
+visited = {s}; queue = [s]
+emitir START
+
+mientras queue no vacío:
+  u = queue.pop_left()
+  para cada conector c_u de u:
+    v = pieza(vecino(c_u))
+    si v en M:
+      emitir MISSING; continuar
+    si v en visited: continuar
+    visited.add(v); queue.append(v)
+    emitir PLACED
+
+para p en P - visited - M:
+  emitir MISSING: inalcanzable</pre>
+        <div class="callout">
+          <p>El estado faltante es persistente entre sesiones — no es un parámetro pasado en tiempo de ejecución, sino una propiedad del grafo en Neo4j.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. PUZZLES -->
+  <div class="slide">
+    <div class="eyebrow">05 — Datos</div>
+    <h2>Rompecabezas incluidos</h2>
+    <p>Definidos en <code>data/default_puzzles.json</code>. Cargar con <code>python seed.py</code> — crea constraints UNIQUE y es idempotente.</p>
+    <div class="split">
+      <div>
+        <div class="card">
+          <h3 style="font-size:.95rem">🦕 Plesiosaurs</h3>
+          <p style="margin-top:.25rem">Cadena casi lineal: P01→…→P08, con P08 ramificando a P09 y P10. Hub único al final de la columna vertebral.</p>
+          <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
+            <span class="tag">10 piezas</span><span class="tag">9 conexiones</span><span class="tag">hub: P08</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="font-size:.95rem">🚜 Excavator</h3>
+          <p style="margin-top:.25rem">Grafo más denso. P04 (cabina) y P07 (cuerpo) son hubs con 3 y 4 conectores respectivamente.</p>
+          <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
+            <span class="tag">10 piezas</span><span class="tag">12 conexiones</span><span class="tag">hubs: P04, P07</span>
+          </div>
+        </div>
+        <pre><span class="cm"># limpiar y recargar</span>
+MATCH (n) DETACH DELETE n
+python seed.py</pre>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <div class="img-card">
+          <img src="figs/ples.jpeg" alt="Plesiosaurs" style="height:160px" />
+          <div class="img-caption"><h3>Plesiosaurs</h3><span class="tag">9 conexiones</span></div>
+        </div>
+        <div class="img-card">
+          <img src="figs/exc.jpeg" alt="Excavator" style="height:160px" />
+          <div class="img-caption"><h3>Excavator</h3><span class="tag">12 conexiones</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. STACK -->
+  <div class="slide vcenter" style="background:radial-gradient(ellipse at 50% 100%,rgba(124,58,237,.12) 0%,transparent 60%)">
+    <div style="width:100%">
+      <div class="eyebrow" style="text-align:center;margin-bottom:.5rem">Stack</div>
+      <h2 style="text-align:center;margin-bottom:1.25rem">Tecnologías utilizadas</h2>
+      <div class="stack-grid">
+        <div class="stack-card">
+          <div class="icon">🐍</div>
+          <h3>Python</h3>
+          <p>Modelos de datos, BFS, lógica de aplicación</p>
+          <div class="stack-detail"><span>models.py</span> dataclasses<br><span>solver.py</span> BFS<br><span>neo4j.py</span> repositorio</div>
+        </div>
+        <div class="stack-card">
+          <div class="icon">🌿</div>
+          <h3>Neo4j + Cypher</h3>
+          <p>Grafos nativos, constraints UNIQUE, traversals</p>
+          <div class="stack-detail">Nodos: <span>Puzzle · Piece · Connector</span><br>Rels: <span>CONTAINS · HAS_CONNECTOR · CONNECTS_WITH</span></div>
+        </div>
+        <div class="stack-card">
+          <div class="icon">🎈</div>
+          <h3>Streamlit</h3>
+          <p>Interfaz web interactiva</p>
+          <div class="stack-detail">Tab <span>Solve</span>: BFS + faltantes<br>Tab <span>Create Puzzle</span>: carga a Neo4j</div>
+        </div>
+      </div>
+      <p style="text-align:center;margin-top:1.75rem;font-size:.78rem">
+        <a href="https://github.com/DanielBarillasM/Proyecto-03_Eleccion-de-tecnologias-de-base-de-datos_BD2_seccion-20_Grupo-01" style="color:var(--accent);text-decoration:none">GitHub — Proyecto 3 ↗</a>
+        &nbsp;·&nbsp;<span style="color:var(--muted)">Universidad del Valle de Guatemala · Bases de Datos 2</span>
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<button class="nav-btn" id="prev">&#8592;</button>
+<button class="nav-btn" id="next">&#8594;</button>
+<div id="dots"></div>
+<div id="counter"></div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('dots');
+  const counter = document.getElementById('counter');
+  let cur = 0;
+
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => go(i));
+    dotsEl.appendChild(d);
+  });
+
+  function go(n) {
+    if (n < 0 || n >= slides.length) return;
+    slides[cur].classList.remove('active');
+    slides[cur].classList.add('exit');
+    const old = cur; cur = n;
+    setTimeout(() => slides[old].classList.remove('exit'), 380);
+    slides[cur].classList.add('active');
+    document.querySelectorAll('.dot').forEach((d,i) => d.classList.toggle('active', i === cur));
+    counter.textContent = `${cur + 1} / ${slides.length}`;
+  }
+
+  go(0);
+  document.getElementById('prev').addEventListener('click', () => go(cur - 1));
+  document.getElementById('next').addEventListener('click', () => go(cur + 1));
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight','ArrowDown',' '].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key))        { e.preventDefault(); go(cur - 1); }
+  });
+</script>
+</body>
+</html>

@@ -22,9 +22,13 @@ app/
   neo4j.py    repositorio Neo4j (seed, list, get)
   solver.py   algoritmo BFS
   ui.py       interfaz Streamlit
+data/
+  default_puzzles.json  rompecabezas de ejemplo (Plesiosaurus, Excavator)
 docs/
   solution.tex  documento del proyecto
+  figs/         imágenes de rompecabezas etiquetados físicamente
 main.py
+seed.py         carga default_puzzles.json a Neo4j
 requirements.txt
 ```
 
@@ -45,6 +49,20 @@ NEO4J_URI=neo4j+s://TU_INSTANCIA.databases.neo4j.io
 NEO4J_USERNAME=tu_usuario
 NEO4J_PASSWORD=tu_password
 NEO4J_DATABASE=tu_database
+```
+
+## Cargar datos de ejemplo
+
+```bash
+python seed.py
+```
+
+Carga los rompecabezas definidos en `data/default_puzzles.json` (Plesiosaurus y Excavator) a Neo4j. Es idempotente — se puede correr más de una vez sin duplicar datos. También crea las constraints `UNIQUE` necesarias.
+
+Para limpiar la base de datos antes de un seed fresco:
+
+```cypher
+MATCH (n) DETACH DELETE n
 ```
 
 ## Ejecutar
