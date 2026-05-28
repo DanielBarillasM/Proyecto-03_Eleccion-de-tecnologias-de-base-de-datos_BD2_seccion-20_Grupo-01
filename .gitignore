@@ -12,6 +12,7 @@ __pycache__/
 .Python
 
 # latex build artifacts
+docs/.tex/
 docs/*.aux
 docs/*.log
 docs/*.out
